@@ -86,8 +86,11 @@ def attack_patch_at_position(model, image_tensor, target_label, patch_h, patch_w
     torch.manual_seed(seed)
     x, y = position
     
-    # Initialize patch
-    patch = torch.rand((3, patch_h, patch_w), requires_grad=True)
+    # Move image tensor to device
+    image_tensor_dev = image_tensor.to(DEVICE)
+    
+    # Initialize patch ON DEVICE
+    patch = torch.rand((3, patch_h, patch_w), device=DEVICE, requires_grad=True)
     
     # Optimizer
     optimizer = torch.optim.Adam([patch], lr=0.2)
@@ -109,7 +112,7 @@ def attack_patch_at_position(model, image_tensor, target_label, patch_h, patch_w
                 patch.add_(noise)
                 stagnation_counter = 0
         
-        patched_img = apply_patch(image_tensor, patch, x, y)
+        patched_img = apply_patch(image_tensor_dev, patch, x, y)
         output = model(patched_img.unsqueeze(0))
         
         # CW Loss
@@ -119,7 +122,7 @@ def attack_patch_at_position(model, image_tensor, target_label, patch_h, patch_w
         other_logits[target_label] = -1e9
         max_other = torch.max(other_logits)
         
-        loss = torch.max(max_other - target_logit, torch.tensor(-kappa).float())
+        loss = torch.max(max_other - target_logit, torch.tensor(-kappa, device=DEVICE).float())
         
         loss.backward()
         optimizer.step()
@@ -133,6 +136,7 @@ def attack_patch_at_position(model, image_tensor, target_label, patch_h, patch_w
                 best_patch_saved = patch.detach().clone()
         
         if i % 500 == 0:
+            print(f"  [Step {i}] Prob: {prob:.4f} Best: {best_prob_so_far:.4f}")
             if best_prob_so_far - last_best < 0.005:
                 stagnation_counter += 1
             else:
@@ -141,12 +145,14 @@ def attack_patch_at_position(model, image_tensor, target_label, patch_h, patch_w
             
             # Early stop
             if best_prob_so_far >= 0.80:
+                print(f"  [*] Target 0.80 reached!")
                 break
 
+    # Move back to CPU for saving
     if best_patch_saved is not None:
-        final_image = apply_patch(image_tensor, best_patch_saved, x, y)
+        final_image = apply_patch(image_tensor, best_patch_saved.cpu(), x, y)
     else:
-        final_image = apply_patch(image_tensor, patch, x, y)
+        final_image = apply_patch(image_tensor, patch.cpu(), x, y)
     return final_image, best_prob_so_far
 
 def save_image(tensor, output_path):
