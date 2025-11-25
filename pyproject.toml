@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pyautogui>=0.9.54",
+    "requests>=2.32.5",
     "torch>=2.9.1",
     "torchvision>=0.24.1",
 ]
